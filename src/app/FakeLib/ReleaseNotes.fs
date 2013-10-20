@@ -11,6 +11,8 @@ type ReleaseNotes =
 
 [<CompilationRepresentation (CompilationRepresentationFlags.ModuleSuffix)>]
 module ReleaseNotes =
+    open FParsec
+
     let private nugetRegex = getRegEx @"([0-9]+.)+[0-9]+(-[a-zA-Z]+)?"
     let private assemblyRegex = getRegEx @"([0-9]+.)+[0-9]+"
 
@@ -45,7 +47,7 @@ module ReleaseNotes =
     /// Parse a Release Notes text - Either simple or "complex" format
     /// See: https://github.com/fsharp/FAKE/issues/171
     /// <param name="data">Release notes text</param>
-    let parseReleaseNotes (data: seq<string>) = 
+    let parseReleaseNotes' (data: seq<string>) = 
         let data = data |> Seq.toList |> List.filter (not << isNullOrWhiteSpace)
         match data with
         | [] -> failwith "Empty Realease file."
@@ -56,3 +58,18 @@ module ReleaseNotes =
             | Simple -> parseSimpleReleaseNotes data
             | Complex -> parseComplexReleaseNotes data
             | Invalid -> failwith "Invalid Release Notes format."
+
+
+    let parseReleaseNotes (data: string) =
+// * 1.1.9 - Infer booleans for ints that only manifest 0 and 1. Support for partially overriding the Schema in CsvProvider.
+// * 1.1.10 - Support for heterogeneous XML attributes. Make CsvFile re-entrant.
+        let inline separated delimiter (items: string seq) = String.Join(delimiter, Array.ofSeq items)
+
+        let version = sepBy1 puint32 (pchar '.') |>> fun x -> x |> Seq.map string |> separated "."
+        let notes = sepEndBy1 (many1Chars (noneOf "*")) (pchar '.')
+        let releaseNote = pchar '*' >>. spaces >>. version .>> skipManySatisfy (fun c -> c = ' ' || c = '-') >>. notes
+        let releaseNotes = many1 releaseNote
+
+        match run releaseNotes data with
+        | Success (result, _, _) -> result
+        | Failure (error, _, _) -> failwith error
