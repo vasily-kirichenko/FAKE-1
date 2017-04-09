@@ -1,3 +1,4 @@
+framework: >= net40
 content: none
 source http://nuget.org/api/v2
 
